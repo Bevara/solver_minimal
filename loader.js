@@ -233,7 +233,7 @@
       let args = [];
 
       params["locateFile"] = function (path, scriptDirectory) {
-        if (path == "solver_minimal_1.wasm" && m.data.wasmBinaryFile) {
+        if (path == "solver_1.wasm" && m.data.wasmBinaryFile) {
           return m.data.wasmBinaryFile;
         }
         return path;
@@ -508,6 +508,6 @@
     const handle_message = await initSolver();
     addEventListener("message", handle_message);
   } else if (ENVIRONMENT_IS_WEB) {
-    window.solver_minimal_1 = initSolver;
+    window.solver_1 = initSolver;
   }
 })();

@@ -148,11 +148,6 @@ static Bool gpac_event_proc(void *opaque, GF_Event *event)
 			evt_ret_val = event->message.error;
 		gf_fs_abort(fsess, GF_FS_FLUSH_ALL);
 	}
-#if !defined(GPAC_CONFIG_ANDROID) && !defined(GPAC_DISABLE_COMPOSITOR)
-	else if (custom_event_proc) {
-		return mp4c_event_proc(opaque, event);
-	}
-#endif
 	return GF_FALSE;
 }
 
@@ -160,20 +155,9 @@ static Bool gpac_event_proc(void *opaque, GF_Event *event)
 static Bool gpac_fsess_task(GF_FilterSession *fsess, void *callback, u32 *reschedule_ms)
 {
 	if (enable_prompt && gf_prompt_has_input()) {
-#if !defined(GPAC_CONFIG_ANDROID) && !defined(GPAC_DISABLE_COMPOSITOR)
-		if ((compositor_mode==LOAD_MP4C) && mp4c_handle_prompt(gf_prompt_get_char())) {
-
-		} else
-#endif
 		if (!gpac_handle_prompt(fsess, gf_prompt_get_char()))
 			return GF_FALSE;
 	}
-
-#if !defined(GPAC_CONFIG_ANDROID) && !defined(GPAC_DISABLE_COMPOSITOR)
-	if ((compositor_mode==LOAD_MP4C) && mp4c_task()) {
-		gf_fs_abort(fsess, GF_FS_FLUSH_NONE);
-	}
-#endif
 
 	if (runfor>0) {
 		u64 now = gf_sys_clock_high_res();
@@ -559,74 +543,11 @@ int gpac_main(int _argc, char **_argv)
 	}
 #endif
 
-	//look for mem track and profile, and check for link directives
-	for (i=1; i<argc; i++) {
-		char *arg = argv[i];
-		if (!strcmp(arg, "-mem-track") || !strcmp(arg, "-mem-track-stack")) {
-#ifdef GPAC_MEMORY_TRACKING
-            mem_track = !strcmp(arg, "-mem-track-stack") ? GF_MemTrackerBackTrace : GF_MemTrackerSimple;
-#else
-			fprintf(stderr, "WARNING - GPAC not compiled with Memory Tracker - ignoring \"%s\"\n", arg);
-#endif
-		} else if (!strncmp(arg, "-p=", 3)) {
-			profile = arg+3;
-		} else if (!strncmp(arg, "-creds", 6)) {
-			do_creds = GF_TRUE;
-			if (!strncmp(arg, "-creds=", 7)) creds_args = arg+7;
-		} else if (!strncmp(arg, "-mkl=", 5)) {
-			return gpac_make_lang(arg+5);
-		}
-	}
-
 	gf_sys_init(mem_track, profile);
 
 
-#ifdef GPAC_CONFIG_ANDROID
-	//prevent destruction of JSRT until we unload the JNI gpac wrapper (see applications/gpac_android/src/main/jni/gpac_jni.cpp)
-	gf_opts_set_key("temp", "static-jsrt", "true");
-#endif
-
-	if (do_creds) {
-		gf_sys_set_args(argc, (const char **)argv);
-		return gpac_do_creds(creds_args);
-	}
-
 //	gf_log_set_tool_level(GF_LOG_ALL, GF_LOG_WARNING);
 	gf_log_set_tool_level(GF_LOG_APP, GF_LOG_INFO);
-
-	if (gf_opts_get_key_count("gpac.alias")) {
-		for (i=1; i<argc; i++) {
-			char *arg = argv[i];
-			if (gf_opts_get_key("gpac.alias", arg) != NULL) {
-				has_alias = GF_TRUE;
-				if (!strcmp(arg, "-play"))
-					alias_is_play = GF_TRUE;
-				break;
-			}
-		}
-		if (has_alias) {
-			if (! gpac_expand_alias(argc, argv) ) {
-				gpac_exit(1);
-			}
-			argc = alias_argc;
-			argv = alias_argv;
-		}
-	}
-
-#ifndef GPAC_CONFIG_ANDROID
-	if (compositor_mode) {
-		//we by default want 2 additional threads in gui:
-		//main thread might get locked on vsync
-		//second thread might be busy decoding audio/video
-		//third thread will then be able to refill all buffers/perform networks tasks
-		gf_opts_set_key("temp", "threads", "2");
-		//the number of threads will be overridden if set at command line
-
-		if (compositor_mode==LOAD_MP4C)
-			enable_prompt = GF_TRUE;
-	}
-#endif
-
 
 	//this will parse default args
 	e = gf_sys_set_args(argc, (const char **) argv);
@@ -634,20 +555,6 @@ int gpac_main(int _argc, char **_argv)
 		fprintf(stderr, "Error assigning libgpac arguments: %s\n", gf_error_to_string(e) );
 		gpac_exit(1);
 	}
-
-	if (!profile || (strcmp(profile, "0") && strcmp(profile, "n")) )
-		gpac_load_suggested_filter_args();
-
-#ifndef GPAC_DISABLE_LOG
-	if (gf_log_tool_level_on(GF_LOG_APP, GF_LOG_DEBUG)) {
-		GF_LOG(GF_LOG_DEBUG, GF_LOG_APP, ("GPAC args: "));
-		for (i=1; i<argc; i++) {
-			char *arg = argv[i];
-			GF_LOG(GF_LOG_DEBUG, GF_LOG_APP, ("%s ", arg));
-		}
-		GF_LOG(GF_LOG_DEBUG, GF_LOG_APP, ("\n"));
-	}
-#endif
 
 	//emscripten, always use step mode by default, unless explicitly disabled by -step=N<0
 #ifdef GPAC_CONFIG_EMSCRIPTEN
@@ -669,436 +576,11 @@ int gpac_main(int _argc, char **_argv)
 
 		gf_sys_mark_arg_used(i, GF_TRUE);
 
-		if ((!has_xopt && !strcmp(arg, "-h")) || !strcmp(arg, "-help") || !strcmp(arg, "-ha") || !strcmp(arg, "-hx") || !strcmp(arg, "-hh")) {
-			if (!strcmp(arg, "-ha")) argmode = GF_ARGMODE_ADVANCED;
-			else if (!strcmp(arg, "-hx")) argmode = GF_ARGMODE_EXPERT;
-			else if (!strcmp(arg, "-hh")) argmode = GF_ARGMODE_ALL;
 
-			gf_opts_set_key("temp", "gpac-help", arg+1);
-
-			if (i+1<argc)
-				gf_sys_mark_arg_used(i+1, GF_TRUE);
-			if ((i+1==argc) || (argv[i+1][0]=='-')) {
-				gpac_usage(argmode);
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "log")) {
-				gpac_core_help(GF_ARGMODE_ALL, GF_TRUE);
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "core")) {
-				gpac_core_help(argmode, GF_FALSE);
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "modules") || !strcmp(argv[i+1], "module")) {
-				if (i+2<argc) {
-					gf_sys_mark_arg_used(i+2, GF_TRUE);
-					gpac_modules_help(argv[i+2]);
-				} else {
-					gpac_modules_help(NULL);
-				}
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "doc")) {
-				gpac_filter_help();
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "alias")) {
-				gpac_alias_help(argmode);
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "props")) {
-				if (i+2<argc) {
-					gf_sys_mark_arg_used(i+2, GF_TRUE);
-					dump_all_props(argv[i+2]);
-				} else {
-					dump_all_props(NULL);
-				}
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "colors")) {
-				dump_all_colors();
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "layouts")) {
-				dump_all_audio_cicp();
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "cfg")) {
-				gpac_config_help();
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "prompt")) {
-				gpac_fsess_task_help();
-				gpac_exit(0);
-#ifdef GPAC_DEFER_MODE
-			} else if (!strcmp(argv[i+1], "defer")) {
-				gpac_defer_help();
-				gpac_exit(0);
-#endif
-			} else if (!strcmp(argv[i+1], "mp4c")) {
-#if defined(GPAC_CONFIG_ANDROID) || defined(GPAC_DISABLE_COMPOSITOR)
-				gf_sys_format_help(helpout, help_flags, "-mp4c unavailable for android\n");
-#else
-				mp4c_help(argmode);
-#endif
-				gpac_exit(0);
-
-			}
-			//old syntax -gui -h us still valid, but also allow -h gui to be consistent with other help options
-			else if (!strcmp(argv[i+1], "gui")) {
-				gf_opts_set_key("temp", "gpac-help", "yes");
-				session = gf_fs_new_defaults(0);
-				gf_set_progress_callback(session, NULL);
-				gf_fs_load_filter(session, "compositor:player=gui", NULL);
-				gf_fs_run(session);
-				gf_fs_del(session);
-				session = NULL;
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "codecs")) {
-				dump_codecs = GF_TRUE;
-				sflags |= GF_FS_FLAG_LOAD_META | GF_FS_FLAG_NO_GRAPH_CACHE;
-				i++;
-			} else if (!strcmp(argv[i+1], "formats") || !strcmp(argv[i+1], "exts")) {
-				dump_formats = GF_TRUE;
-				sflags |= GF_FS_FLAG_LOAD_META | GF_FS_FLAG_NO_GRAPH_CACHE;
-				i++;
-			} else if (!strcmp(argv[i+1], "protocols")) {
-				dump_proto_schemes = GF_TRUE;
-				sflags |= GF_FS_FLAG_LOAD_META | GF_FS_FLAG_NO_GRAPH_CACHE;
-				i++;
-			} else if (!strcmp(argv[i+1], "net")) {
-#ifndef GPAC_DISABLE_NETWORK
-				char szName[100];
-				szName[0]=0;
-				gf_net_enum_interfaces(enum_net_ifces, szName);
-#endif
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "links")) {
-				view_filter_conn = GF_TRUE;
-				if ((i+2<argc)	&& (argv[i+2][0] != '-')) {
-					view_conn_for_filter = argv[i+2];
-					gf_sys_mark_arg_used(i+2, GF_TRUE);
-					i++;
-				}
-
-				i++;
-			} else if (!strcmp(argv[i+1], "creds")) {
-				gpac_credentials_help(argmode);
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "bin")) {
-				gf_sys_format_help(helpout, help_flags, "GPAC binary information:\n"
-					"Version: %s\n"
-					"Compilation configuration: " GPAC_CONFIGURATION "\n"
-					"Enabled features: %s\n"
-	        		"Disabled features: %s\n", gf_gpac_version(), gf_sys_features(GF_FALSE), gf_sys_features(GF_TRUE)
-				);
-				gpac_exit(0);
-			} else if (!strcmp(argv[i+1], "filters")) {
-				list_filters = 1;
-				sflags |= GF_FS_FLAG_NO_GRAPH_CACHE;
-				i++;
-			} else if (!strcmp(argv[i+1], "filters:*") || !strcmp(argv[i+1], "filters:@")) {
-				list_filters = 2;
-				sflags |= GF_FS_FLAG_NO_GRAPH_CACHE;
-				i++;
-			} else {
-				print_filter_info = 1;
-				if (!strcmp(argv[i+1], "*:*") || !strcmp(argv[i+1], "@:@"))
-					print_filter_info = 2;
-				sflags |= GF_FS_FLAG_NO_GRAPH_CACHE;
-			}
-		}
-		else if (has_xopt && !strcmp(arg, "-h")) {
-			gf_opts_set_key("temp", "gpac-help", "yes");
-		}
-		else if (!strcmp(arg, "-genmd") || !strcmp(arg, "-genman")) {
-			argmode = GF_ARGMODE_ALL;
-			if (!strcmp(arg, "-genmd")) {
-				gf_opts_set_key("temp", "gendoc", "yes");
-				gen_doc = 1;
-				help_flags = GF_PRINTARG_MD;
-				helpout = gf_fopen("gpac_general.md", "w");
-				fprintf(helpout, "%s", auto_gen_md_warning);
-				fprintf(helpout, "# General Usage of gpac\n");
-			} else {
-				gf_opts_set_key("temp", "gendoc", "yes");
-				gen_doc = 2;
-				help_flags = GF_PRINTARG_MAN;
-				helpout = gf_fopen("gpac.1", "w");
-	 			fprintf(helpout, ".TH gpac 1 2019 gpac GPAC\n");
-				fprintf(helpout, ".\n.SH NAME\n.LP\ngpac \\- GPAC command-line filter session manager\n"
-				".SH SYNOPSIS\n.LP\n.B gpac\n"
-				".RI [options] FILTER [LINK] FILTER [...]\n.br\n.\n");
-			}
-			gpac_usage(GF_ARGMODE_ALL);
-
-			if (gen_doc==1) {
-				fprintf(helpout, "# Using Aliases\n");
-			} else {
-				fprintf(helpout, ".SH Using Aliases\n.PL\n");
-			}
-			gpac_alias_help(GF_ARGMODE_EXPERT);
-
-
-			gpac_credentials_help(GF_ARGMODE_EXPERT);
-
-			if (gen_doc==1) {
-				gf_fclose(helpout);
-				helpout = gf_fopen("core_config.md", "w");
-				fprintf(helpout, "%s", auto_gen_md_warning);
-			}
-			gpac_config_help();
-
-			if (gen_doc==1) {
-				gf_fclose(helpout);
-				helpout = gf_fopen("core_options.md", "w");
-				fprintf(helpout, "%s", auto_gen_md_warning);
-				fprintf(helpout, "# GPAC Core Options\n");
-			}
-			gpac_core_help(argmode, GF_FALSE);
-
-			if (gen_doc==1) {
-				gf_fclose(helpout);
-				helpout = gf_fopen("core_logs.md", "w");
-				fprintf(helpout, "%s", auto_gen_md_warning);
-				fprintf(helpout, "# GPAC Log System\n");
-			}
-			gpac_core_help(argmode, GF_TRUE);
-
-			if (gen_doc==1) {
-				gf_fclose(helpout);
-				helpout = gf_fopen("filters_general.md", "w");
-				fprintf(helpout, "%s", auto_gen_md_warning);
-			}
-#ifndef GPAC_DISABLE_DOC
-			gf_sys_format_help(helpout, help_flags, "%s", gpac_doc);
-#endif
-
-			if (gen_doc==1) {
-				gf_fclose(helpout);
-				helpout = gf_fopen("filters_properties.md", "w");
-				fprintf(helpout, "%s", auto_gen_md_warning);
-			}
-			gf_sys_format_help(helpout, help_flags, "# GPAC Built-in properties\n");
-			dump_all_props(NULL);
-//			dump_codecs = GF_TRUE;
-
-			if (gen_doc==2) {
-				fprintf(helpout, ".SH EXAMPLES\n.TP\nBasic and advanced examples are available at https://wiki.gpac.io/Filters/Filters\n");
-				fprintf(helpout, ".SH MORE\n.LP\nAuthors: GPAC developers, see git repo history (-log)\n"
-				".br\nFor bug reports, feature requests, more information and source code, visit https://github.com/gpac/gpac\n"
-				".br\nbuild: %s\n"
-				".br\nCopyright: %s\n.br\n"
-				".SH SEE ALSO\n"
-				".LP\ngpac-filters(1),MP4Box(1)\n", GPAC_VERSION, gf_gpac_copyright());
-				gf_fclose(helpout);
-
-				helpout = gf_fopen("gpac-filters.1", "w");
-	 			fprintf(helpout, ".TH gpac 1 2019 gpac GPAC\n");
-				fprintf(helpout, ".\n.SH NAME\n.LP\ngpac \\- GPAC command-line filter session manager\n"
-				".SH SYNOPSIS\n.LP\n.B gpac\n"
-				".RI [options] FILTER [LINK] FILTER [...]\n.br\n.\n"
-				".SH DESCRIPTION\n.LP"
-				"\nThis page describes all filters usually present in GPAC\n"
-				"\nTo check for help on a filter not listed here, use gpac -h myfilter\n"
-				"\n"
-				);
-			}
-
-			list_filters = 1;
-		}
-		else if (!strcmp(arg, "-ltf")) {
-			load_test_filters = GF_TRUE;
-		} else if (!strncmp(arg, "-lcf", 4)) {
-		} else if (!strcmp(arg, "-stats")) {
-			dump_stats = GF_TRUE;
-		} else if (!strcmp(arg, "-graph")) {
-			dump_graph = GF_TRUE;
-		} else if (strstr(arg, ":*") || strstr(arg, ":@")) {
-			if (list_filters)
-				list_filters = 3;
-			else
-				print_meta_filters = GF_TRUE;
-		} else if (!strcmp(arg, "-wc")) {
-			write_core_opts = GF_TRUE;
-		} else if (!strcmp(arg, "-we")) {
-			write_extensions = GF_TRUE;
-		} else if (!strcmp(arg, "-wf")) {
-			write_profile = GF_TRUE;
-		} else if (!strcmp(arg, "-wfx")) {
-			write_profile = GF_TRUE;
-			sflags |= GF_FS_FLAG_LOAD_META;
-		} else if (!strcmp(arg, "-sloop")) {
-			nb_loops = -1;
-			if (arg_val) nb_loops = get_s32(arg_val, "sloop");
-		} else if (!strcmp(arg, "-runfor")) {
-			if (arg_val) runfor = 1000*get_u32(arg_val, "runfor");
-		} else if (!strcmp(arg, "-runforf")) {
-			if (arg_val) runfor = 1000*get_u32(arg_val, "runfor");
-			runfor_fast = GF_TRUE;
-		} else if (!strcmp(arg, "-runforx")) {
-			if (arg_val) runfor = 1000*get_u32(arg_val, "runforx");
-			runfor_exit = GF_TRUE;
-		} else if (!strcmp(arg, "-runfors")) {
-			if (arg_val) runfor = 1000*get_u32(arg_val, "runfors");
-			exit_mode = 1;
-		} else if (!strcmp(arg, "-runforl")) {
-			if (arg_val) runfor = 1000*get_u32(arg_val, "runforl");
-			exit_mode = 2;
-		} else if (!strcmp(arg, "-uncache")) {
-			const char *cache_dir = gf_opts_get_key("core", "cache");
-			gf_enum_directory(cache_dir, GF_FALSE, revert_cache_file, NULL, ".txt");
-			fprintf(stderr, "GPAC Cache dir %s flattened\n", cache_dir);
-			gpac_exit(0);
-		} else if (!strcmp(arg, "-cfg")) {
-			nothing_to_do = GF_FALSE;
-		}
-
-		else if (!strcmp(arg, "-alias") || !strcmp(arg, "-aliasdoc")) {
-			char *alias_val;
-			Bool exists;
-			if (!arg_val) {
-				fprintf(stderr, "-alias does not have any argument, check usage \"gpac -h\"\n");
-				gpac_exit(1);
-			}
-			alias_val = arg_val ? strchr(arg_val, ' ') : NULL;
-			if (alias_val) alias_val[0] = 0;
-
-			session = gf_fs_new_defaults(sflags);
-			exists = gf_fs_filter_exists(session, arg_val);
-			gf_fs_del(session);
-			if (exists) {
-				fprintf(stderr, "alias %s has the same name as an existing filter, not allowed\n", arg_val);
-				if (alias_val) alias_val[0] = ' ';
-				gpac_exit(1);
-			}
-
-			gf_opts_set_key(!strcmp(arg, "-alias") ? "gpac.alias" : "gpac.aliasdoc", arg_val, alias_val ? alias_val+1 : NULL);
-			fprintf(stderr, "Set %s for %s to %s\n", arg, arg_val, alias_val ? alias_val+1 : "NULL");
-			if (alias_val) alias_val[0] = ' ';
-			alias_set = GF_TRUE;
-		}
-		else if (!strncmp(arg, "-seps", 5)) {
-			parse_sep_set(arg_val, &override_seps);
-		} else if (!strcmp(arg, "-mem-track") || !strcmp(arg, "-mem-track-stack")) {
-
-		} else if (!strcmp(arg, "-k")) {
-			if (arg_val && (!strcmp(arg_val, "0") || !strcmp(arg_val, "no") || !strcmp(arg_val, "false")))
-				enable_prompt = GF_FALSE;
-			else
-				enable_prompt = GF_TRUE;
-		} else if (!strcmp(arg, "-qe")) {
+		if (!strcmp(arg, "-qe")) {
 			exit_nocleanup = GF_TRUE;
-		} else if (!strcmp(arg, "-js")) {
-			session_js = arg_val;
-		} else if (!strcmp(arg, "-r")) {
-			enable_reports = 2;
-			if (arg_val && !strlen(arg_val)) {
-				enable_reports = 1;
-			} else {
-				report_filter = arg_val;
-			}
-		} else if (!strcmp(arg, "-unit-tests")) {
-			do_unit_tests = GF_TRUE;
-		} else if (!strcmp(arg, "-cl")) {
-			sflags |= GF_FS_FLAG_NO_IMPLICIT;
-		} else if (!strcmp(arg, "-sid")) {
-			sflags |= GF_FS_FLAG_REQUIRE_SOURCE_ID;
-#ifdef GPAC_DEFER_MODE
-		} else if (!strcmp(arg, "-dl")) {
-			sflags |= GF_FS_FLAG_FORCE_DEFER_LINK;
-			defer_mode=GF_TRUE;
-		} else if (!strcmp(arg, "-np")) {
-			sflags |= GF_FS_FLAG_PREVENT_PLAY;
-		} else if (!strncmp(arg, "-rl", 2)
-			|| !strncmp(arg, "-wl", 2)
-			|| !strcmp(arg, "-f")
-			|| !strcmp(arg, "-s")
-			|| !strcmp(arg, "-g")
-			|| !strcmp(arg, "-pi")
-			|| !strcmp(arg, "-pl")
-			|| !strcmp(arg, "-pd")
-			|| !strcmp(arg, "-se")
-		) {
-#endif
-		} else if (!strcmp(arg, "-step")) {
-			use_step_mode = GF_TRUE;
-#ifdef GPAC_CONFIG_EMSCRIPTEN
-			if (arg_val) {
-				char *sep = strchr(arg_val, ':');
-				if (sep) sep[0] = 0;
-				if (arg_val[0]) {
-					em_raf_fps = atoi(arg_val);
-					if (em_raf_fps<0) {
-						use_step_mode = GF_FALSE;
-					}
-				}
-				if (sep) {
-					if (sep[1]) {
-						run_steps = atoi(sep+1);
-					}
-					sep[0] = 0;
-				}
-			}
-#endif
-		} else if (!strcmp(arg, "-xopt")) {
-			has_xopt = GF_TRUE;
-#ifdef GPAC_CONFIG_IOS
-		} else if (!strcmp(arg, "-req-gl")) {
-#endif
-		} else if (arg[0]=='-') {
-			if (!strcmp(arg, "-i") || !strcmp(arg, "-src")
-				|| !strcmp(arg, "-o") || !strcmp(arg, "-dst")
-				|| !strcmp(arg, "-ib") || !strcmp(arg, "-ob")
-				|| !strcmp(arg, "-ibx")
-			) {
-				//skip next arg: input or output, could start with '-'
-				i++;
-				gf_sys_mark_arg_used(i, GF_TRUE);
-			}
-			//profile already processed, and global options (--) handled by libgpac, not this app
-			else if (!strcmp(arg, "-p") || !strcmp(arg, "-")
-			) {
-			}
-			else if (gf_sys_is_gpac_arg(arg) ) {
-			}
-#if !defined(GPAC_CONFIG_ANDROID) && !defined(GPAC_DISABLE_COMPOSITOR)
-			else if ((compositor_mode==LOAD_MP4C) && mp4c_parse_arg(arg, arg_val)) {
-			}
-#endif
-			else {
-				if (!has_xopt) {
-					gpac_suggest_arg(arg);
-					gpac_exit(-1);
-				} else {
-					gf_sys_mark_arg_used(i, GF_FALSE);
-				}
-			}
 		}
 	}
-
-	if (use_step_mode)
-		sflags |= GF_FS_FLAG_NON_BLOCKING;
-
-	if (do_unit_tests) {
-		gpac_exit( gpac_unit_tests(mem_track) );
-	}
-
-	if (alias_set) {
-		gpac_exit(0);
-	}
-
-	if (dump_stats && gf_sys_get_rti(0, &rti, 0) ) {
-		GF_LOG(GF_LOG_INFO, GF_LOG_APP, ("System info: %d MB RAM - %d cores\n", (u32) (rti.physical_memory/1024/1024), rti.nb_cores ));
-	}
-	if ((list_filters>=2) || print_meta_filters || dump_codecs || dump_formats || print_filter_info) sflags |= GF_FS_FLAG_LOAD_META;
-
-	if (list_filters || print_filter_info)
-		gf_opts_set_key("temp", "helponly", "yes");
-
-	if (dump_proto_schemes || (gen_doc==1))
-		gf_opts_set_key("temp", "get_proto_schemes", "yes");
-
-
-#if defined(GPAC_CONFIG_DARWIN) && !defined(GPAC_CONFIG_IOS)
-	if (compositor_mode==LOAD_GUI_ENV) {
-		const char *sys_logs = getenv("GPAC_SYSLOG");
-		if (sys_logs && !stricmp(sys_logs, "yes")) {
-			gf_log_set_callback(NULL, gpac_syslog);
-		}
-	}
-#endif
 
 #ifdef GPAC_CONFIG_EMSCRIPTEN
 	return gpac_run();
@@ -1144,44 +626,6 @@ restart:
 
 	if (gf_fs_get_max_resolution_chain_length(session) <= 1 ) {
 		GF_LOG(GF_LOG_INFO, GF_LOG_APP, ("\nDynamic resolution of filter connections disabled\n\n"));
-	}
-
-	if (list_filters || print_filter_info) {
-
-		if (gen_doc==1) {
-			dump_all_formats(argmode);
-			dump_all_proto_schemes(argmode);
-			list_filters = 1;
-		}
-
-		if (print_filters(argc, argv, argmode)==GF_FALSE)
-			e = GF_NOT_FOUND;
-		ERR_EXIT
-	}
-	if (view_filter_conn) {
-		gf_fs_print_all_connections(session, view_conn_for_filter, gf_sys_format_help);
-		ERR_EXIT
-	}
-	if (dump_codecs) {
-		dump_all_codecs(argmode);
-		ERR_EXIT
-	}
-	if (dump_formats) {
-		dump_all_formats(argmode);
-		ERR_EXIT
-	}
-	if (dump_proto_schemes) {
-		dump_all_proto_schemes(argmode);
-		ERR_EXIT
-	}
-	if (write_profile || write_extensions || write_core_opts) {
-		if (write_core_opts)
-			write_core_options();
-		if (write_extensions)
-			write_file_extensions();
-		if (write_profile)
-			write_filters_options();
-		ERR_EXIT
 	}
 
 	if (session_js) {
@@ -1360,11 +804,6 @@ restart:
 					gf_free(updated_args);
 				} else {
 					filter = gf_fs_load_filter(session, arg, &e);
-#if !defined(GPAC_CONFIG_ANDROID) && !defined(GPAC_DISABLE_COMPOSITOR)
-					if (filter && compositor_mode && !strncmp(arg, "compositor", 10)) {
-						load_compositor(filter);
-					}
-#endif
 				}
 				is_simple=GF_TRUE;
 				if (!filter && has_xopt)
@@ -1372,21 +811,6 @@ restart:
 			}
 		}
 
-		if (!filter) {
-			if (has_xopt)
-				continue;
-			if (!e) e = GF_FILTER_NOT_FOUND;
-
-			if (e!=GF_FILTER_NOT_FOUND) {
-				GF_LOG(GF_LOG_ERROR, GF_LOG_APP, ("Failed to load filter%s \"%s\": %s\n", is_simple ? "" : " for",  arg, gf_error_to_string(e) ));
-			} else {
-				GF_LOG(GF_LOG_ERROR, GF_LOG_APP, ("Failed to find filter%s \"%s\"\n", is_simple ? "" : " for",  arg));
-
-				gpac_suggest_filter(arg, GF_FALSE, GF_TRUE);
-				nb_filters=0;
-			}
-			ERR_EXIT
-		}
 		nb_filters++;
 
 		if (!(sflags & GF_FS_FLAG_NO_IMPLICIT))
@@ -1590,8 +1014,6 @@ exit:
 					fprintf(stderr, "UI last error %s\n", gf_error_to_string(e) );
 				}
 			}
-			if (!exit_nocleanup)
-				gpac_check_session_args();
 		}
 
 		if (enable_reports) {
@@ -1621,11 +1043,6 @@ exit:
 		gf_fs_print_stats(session);
 	if (dump_graph)
 		gf_fs_print_connections(session);
-
-#if !defined(GPAC_CONFIG_ANDROID) && !defined(GPAC_DISABLE_COMPOSITOR)
-	if (compositor_mode)
-		unload_compositor();
-#endif
 
 	if (exit_nocleanup && nb_loops == 0) {
 			gf_fs_stop(session);
@@ -1797,15 +1214,7 @@ int main(int argc, char **argv)
 	//no proxy, indicate thread id of main loop to debug any blocking fread calls
 	gf_set_mainloop_thread( 0 );
 
-	if (is_mp4box) {
-		ret_code = mp4box_main(argc, argv);
-		EM_ASM({
-			if (typeof libgpac.gpac_done == 'function')
-				libgpac.gpac_done($0);
-		}, ret_code);
-	} else {
-		ret_code = gpac_main(argc, argv);
-	}
+	ret_code = gpac_main(argc, argv);
 	return ret_code;
 }
 
