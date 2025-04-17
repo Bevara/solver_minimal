@@ -229,11 +229,13 @@
     }
 
     async function init(m) {
+      const message = {
+      };
       const params = m.data.module ? m.data.module : {};
       let args = [];
 
       params["locateFile"] = function (path, scriptDirectory) {
-        if (path == "solver_1.wasm" && m.data.wasmBinaryFile) {
+        if (path == "solver_minimal_1.wasm" && m.data.wasmBinaryFile) {
           return m.data.wasmBinaryFile;
         }
         return path;
@@ -309,9 +311,7 @@
               // convert ANSI colors to HTML
               text = ansiHTML(text);
 
-              if (GPAC.no_log)
-                console.log(text);
-              else if (element) {
+              if (element) {
                 element.innerHTML += text + "<br>";
                 element.scrollTop = element.scrollHeight; // focus on bottom
               }
@@ -339,9 +339,12 @@
       params["gpac_done"] = (code) => {
         //const props  = getProperty(["width", "height"]);
         if (code) console.log('(exit code ' + code + ')');
-        const message = {
-          "exit_code": code
-        };
+
+        message["exit_code"] = code;
+
+        if (m.data.bench == true){
+          message.decodeEnd = performance.now();
+        }
 
         if (m.data.dst) {
           try {
@@ -367,13 +370,16 @@
         }
       };
 
+      if (m.data.bench == true){
+        message.compileStart = performance.now();
+      }
+
       module = await libgpac(params);
       const FS = module['FS'];
 
 
-      let vbench = false;
-      if (m.data.vbench != null) {
-        vbench = true;
+      if (m.data.bench == true){
+        message.compileEnd = performance.now();
       }
 
       if (m.data.src) {
@@ -461,6 +467,11 @@
         }
       };
 
+
+      if (m.data.bench == true){
+        message.decodeStart = performance.now();
+      }
+
       if (ENVIRONMENT_IS_WEB) {
         return new Promise((resolve, reject) => {
           on_done_resolve = resolve;
@@ -508,6 +519,6 @@
     const handle_message = await initSolver();
     addEventListener("message", handle_message);
   } else if (ENVIRONMENT_IS_WEB) {
-    window.solver_1 = initSolver;
+    window.solver_minimal_1 = initSolver;
   }
 })();

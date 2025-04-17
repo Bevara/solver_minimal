@@ -19,7 +19,7 @@ add_compile_definitions(GPAC_HAVE_CONFIG_H GPAC_DISABLE_DOC)
 
 include(exports.cmake)
 
-SET(solver_SRC
+SET(solver_minimal_SRC
   event.c
   filter_register.c
   properties.cpp
@@ -31,23 +31,23 @@ SET(EXTERNAL_RUNTIME
   "['stringToUTF8','UTF8ToString','stackAlloc','addFunction','allocateUTF8OnStack','stackSave','getTempRet0','setTempRet0','FS','cwrap','ccall']"
 )
 
-add_executable(solver_${VERSION} ${solver_SRC})
+add_executable(solver_minimal_${VERSION} ${solver_minimal_SRC})
 
 SET(JS_RUNTIME
   ${CMAKE_CURRENT_SOURCE_DIR}/loader.js
 )
 
-set_target_properties( solver_${VERSION}
+set_target_properties( solver_minimal_${VERSION}
                             PROPERTIES
                                 LINK_FLAGS "${USE_FLAGS} -sALLOW_MEMORY_GROWTH -sWASM_BIGINT -s MAIN_MODULE=2 -s EXPORT_NAME=libgpac --no-entry -s MODULARIZE=1 -s EXPORTED_FUNCTIONS=[${EXPORTED_FUNCTIONS}] -s --extern-post-js=${JS_RUNTIME} EXPORTED_RUNTIME_METHODS=${EXTERNAL_RUNTIME} -s ERROR_ON_UNDEFINED_SYMBOLS=0"
                                 )
 
 
 
-target_link_libraries(solver_${VERSION}
+target_link_libraries(solver_minimal_${VERSION}
   ${CMAKE_CURRENT_SOURCE_DIR}/lib/libgpac_static.a
 )
 
-target_include_directories(solver_${VERSION} PRIVATE
+target_include_directories(solver_minimal_${VERSION} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
