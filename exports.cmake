@@ -6,6 +6,10 @@ SET(GPAC
     '_main'
 )
 
+SET(FILTERS
+    '_gf_filter_get_dst_name'
+)
+
 SET(PTHREADS
     '_pthread_mutex_init'
     '_pthread_mutex_lock'
@@ -114,6 +118,7 @@ SET(SOLVER
 
 SET(EXTERNAL_FN
     ${GPAC}
+    ${FILTERS}
     ${EMSCRIPTEN}
     ${SOLVER}
     ${PTHREADS}
