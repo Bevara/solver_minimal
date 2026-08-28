@@ -320,19 +320,6 @@
         }();
       }
 
-      let register_fns = [];
-      params["gf_fs_reg_all"] = (fsess, a_sess) => {
-        const filters = register_fns.map(filter => {
-          const fn = module[filter];
-          if (fn) {
-            return fn(a_sess);
-          }
-          console.log("Filter not found: " +filter);
-          return null;
-      });
-        filters.map(filter => module.ccall('gf_fs_add_filter_register', null, ['number', 'number'], [fsess, filter]));
-      };
-
       let on_done_resolve = null;
       let on_done_reject = null;
 
@@ -342,7 +329,7 @@
 
         message["exit_code"] = code;
 
-        if (m.data.bench == true){
+        if (m.data.bench == true) {
           message.decodeEnd = performance.now();
         }
 
@@ -370,20 +357,43 @@
         }
       };
 
-      if (m.data.bench == true){
+      if (m.data.bench == true) {
         message.compileStart = performance.now();
       }
 
       module = await libgpac(params);
       const FS = module['FS'];
 
+      //From gpac_pre.js
+      const SIZE_I32 = Uint32Array.BYTES_PER_ELEMENT;
+      module["SIZE_I32"] = SIZE_I32;
+      function stringToPtr(str) {
+        const len = module["lengthBytesUTF8"](str) + 1;
+        const ptr = module["_malloc"](len);
+        module["stringToUTF8"](str, ptr, len);
 
-      if (m.data.bench == true){
+        return ptr;
+      }
+      module["stringsToPtr"] = stringsToPtr;
+
+      function stringsToPtr(strs) {
+        const len = strs.length;
+        const ptr = module["_malloc"](len * SIZE_I32);
+        for (let i = 0; i < len; i++) {
+          module["setValue"](ptr + SIZE_I32 * i, stringToPtr(strs[i]), "i32");
+        }
+
+        return ptr;
+      }
+
+      module["stringToPtr"] = stringToPtr;
+
+      if (m.data.bench == true) {
         message.compileEnd = performance.now();
       }
 
       if (m.data.src) {
-        register_fns.push("_fin_register");
+        registerFilter("fin", "_fin_register");
         const src = m.data.src;
         const response = await fetch(src);
         var fname = src.split('/').pop();
@@ -399,13 +409,11 @@
 
 
       if (m.data.dst) {
-        register_fns.push("_writegen_register");
-        register_fns.push("_fout_register");
+        registerFilter("writegen", "_writegen_register");
+        registerFilter("fout", "_fout_register");
         args.push("-o");
         args.push(m.data.dst);
       }
-
-      register_fns = register_fns.concat(Object.keys(module).filter(x => x.startsWith("dynCall_") && x.endsWith("_register")));
 
       if (m.data.showStats != null) {
         args.push("-stats");
@@ -437,22 +445,53 @@
 
       const GPAC = {};
 
+
+      function registerFilter(filter_name, register_func_name) {
+        const reg_fn = module[register_func_name];
+
+        if (typeof reg_fn !== 'function') {
+          console.error(`Can't find function in loader : ${register_func_name}`);
+          return false;
+        }
+
+        // 1. Convertir la fonction Wasm en pointeur de fonction via addFunction
+        // Le second argument spécifie la signature (ici 'pointer' -> 'pointer', noté "ip" ou équivalent selon la version,
+        // ou plus simplement géré automatiquement par la signature de la fonction C).
+        // En général pour un pointeur de fonction prenant un argument et retournant un pointeur : signature "i i" (int/pointer -> int/pointer)
+        const funcPtr = module.addFunction(reg_fn, 'ip'); // 'ip' = retourne un entier (pointer) et prend un argument (pointer)
+
+        // 2. Allouer la chaîne de caractères pour le nom du filtre en mémoire Wasm
+        const namePtr = module.stringToPtr(filter_name);
+
+        try {
+          // 3. Appeler la fonction C gf_filter_auto_register(const char *name, filter_reg_fun fun)
+          module.ccall(
+            'gf_filter_auto_register',
+            null,
+            ['number', 'number'],
+            [namePtr, funcPtr]
+          );
+          console.log(`Filter "${filter_name}" has been registered by the loader.`);
+        }catch {
+          console.log(`Error : Filter "${filter_name}" has not been registered by the loader.`);
+        } finally {
+          // Libérer la mémoire allouée pour le nom
+          module._free(namePtr);
+          // Note : On ne supprime pas funcPtr avec removeFunction si le registre C
+          // a besoin de conserver le pointeur de manière permanente pour plus tard.
+        }
+      }
+
       //setProperty(args);
       function call_gpac() {
 
         //FIXME
-        libgpac.gf_fs_reg_all = params["gf_fs_reg_all"];
         libgpac.gpac_done = params["gpac_done"];
 
         GPAC.stack = module.stackSave();
         args.unshift("gpac");
         var argc = args.length;
-        var argv = module.stackAlloc((argc + 1) * 4);
-        var argv_ptr = argv >> 2;
-        args.forEach(arg => {
-          module.HEAP32[argv_ptr++] = module.allocateUTF8OnStack(arg);
-        });
-        module.HEAP32[argv_ptr] = 0;
+        var argv = module.stringsToPtr(args);
 
         //const gpac_em_sig_handler = module.cwrap('gpac_em_sig_handler', null, ['number']);
         //gpac_em_sig_handler(4);
@@ -468,7 +507,7 @@
       };
 
 
-      if (m.data.bench == true){
+      if (m.data.bench == true) {
         message.decodeStart = performance.now();
       }
 

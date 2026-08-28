@@ -105,9 +105,10 @@ SET(STDLIB
 
 SET(EMSCRIPTEN
     '_emscripten_longjmp'
-    '_saveSetjmp'
     '___threwValue'
     '___THREW__'
+    '_malloc'
+    '_free'
 )
 
 SET(SOLVER
