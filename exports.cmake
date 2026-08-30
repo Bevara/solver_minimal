@@ -445,6 +445,7 @@ SET(POPPLER
     '__ZNSt3__210filesystem4path8iterator11__incrementEv'
     '__ZNSt3__211__call_onceERVmPvPFvS2_E'
     '__ZNSt3__212__next_primeEm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEED2Ev'
     '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKc'
     '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKcm'
     '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb0EEERS5_PKcm'
