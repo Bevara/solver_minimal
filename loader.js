@@ -486,7 +486,7 @@
       function call_gpac() {
 
         //FIXME
-        libgpac.gpac_done = params["gpac_done"];
+        module["gpac_done"] = params["gpac_done"];
 
         GPAC.stack = module.stackSave();
         args.unshift("gpac");

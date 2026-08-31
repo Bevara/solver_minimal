@@ -251,6 +251,22 @@ u32 getHeight()
 
 void destroy()
 {
-	gf_fs_del(session);
+	/* session can already be NULL/deleted by the time JS calls this:
+	 * gpac.c's own main() (run earlier via _main()) already tears the
+	 * session down and nulls this global once it reaches EOS normally
+	 * (see the "session = NULL; gf_fs_del(tmp_sess);" cleanup near the
+	 * end of gpac_main). Calling gf_fs_del() again here unconditionally
+	 * re-frees already-freed sub-structures - a double free that doesn't
+	 * crash immediately but corrupts the allocator's free-list metadata,
+	 * surfacing later (sometimes in a *different* filter session's own
+	 * teardown) as a "memory access out of bounds" trap deep inside
+	 * dlfree - confirmed as the source of an intermittent crash on
+	 * solver_minimal_1 image/audio decode tests. Guard against it so
+	 * destroy() is safe to call whether or not main() already cleaned
+	 * up. */
+	if (session) {
+		gf_fs_del(session);
+		session = NULL;
+	}
 	//cleanup_file_io();
 }

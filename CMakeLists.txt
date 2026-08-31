@@ -43,7 +43,7 @@ SET(JS_RUNTIME
 
 set_target_properties( solver_minimal_${VERSION}
                             PROPERTIES
-                                LINK_FLAGS "${USE_FLAGS} -fexceptions -sALLOW_MEMORY_GROWTH -sMAIN_MODULE=2 -sEXPORT_NAME=libgpac -sUSE_ZLIB=1 --no-entry -sMODULARIZE=1 -sEXPORTED_FUNCTIONS=[${EXPORTED_FUNCTIONS}] --extern-post-js=${JS_RUNTIME} -sEXPORTED_RUNTIME_METHODS=${EXTERNAL_RUNTIME} -sERROR_ON_UNDEFINED_SYMBOLS=0 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=_emscripten_fs_load_embedded_files -sINITIAL_MEMORY=33554432 -Wl,--export=getTempRet0 -Wl,--export=setTempRet0 -Wl,--export=exit -Wl,--export=__cxa_begin_catch -Wl,--export=__cxa_find_matching_catch_2 -Wl,--export=__cxa_find_matching_catch_3 -Wl,--export=__cxa_throw -Wl,--export=__resumeException -Wl,--export=_Znam -Wl,--export=_ZdaPv -Wl,--export=__cxa_atexit"
+                                LINK_FLAGS "${USE_FLAGS} -fexceptions -sALLOW_MEMORY_GROWTH -sMAIN_MODULE=2 -sEXPORT_NAME=libgpac -sUSE_ZLIB=1 --no-entry -sMODULARIZE=1 -sEXPORTED_FUNCTIONS=[${EXPORTED_FUNCTIONS}] --extern-post-js=${JS_RUNTIME} -sEXPORTED_RUNTIME_METHODS=${EXTERNAL_RUNTIME} -sERROR_ON_UNDEFINED_SYMBOLS=0 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=_emscripten_fs_load_embedded_files -sINITIAL_MEMORY=33554432 -sSTACK_SIZE=5MB -Wl,--export=getTempRet0 -Wl,--export=setTempRet0 -Wl,--export=exit -Wl,--export=__cxa_begin_catch -Wl,--export=__cxa_find_matching_catch_2 -Wl,--export=__cxa_find_matching_catch_3 -Wl,--export=__cxa_throw -Wl,--export=__resumeException -Wl,--export=_Znam -Wl,--export=_ZdaPv -Wl,--export=__cxa_atexit"
                                 )
 
 
