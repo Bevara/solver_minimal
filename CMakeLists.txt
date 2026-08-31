@@ -5,7 +5,17 @@ set (GPAC_BINARIES ${THIRD_PARTIES_BINARIES}/gpac_minimal)
 
 set(VERSION "1")
 
+set(USE_DEBUG "-g")
+set(USE_OPT "-O3")
 
+if(DEBUG_MODE)
+  set(USE_FLAGS "${USE_DEBUG}")
+else()
+  set(USE_FLAGS "${USE_OPT}")
+endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USE_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USE_FLAGS}")
 
 add_compile_definitions(GPAC_HAVE_CONFIG_H GPAC_DISABLE_DOC)
 
