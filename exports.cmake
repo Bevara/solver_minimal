@@ -1,4 +1,29 @@
 
+# Symbols solver_minimal_1 exports to the filter side modules it hosts.
+#
+# Keep this list tight: with MAIN_MODULE=2 an entry does not merely add a
+# symbol-table slot, it also pins the function against dead-stripping, so a
+# dead export drags its whole call graph into the binary. Trimming 86 unused
+# entries once cut ~76KB (-1%) off solver_minimal_1.wasm.
+#
+# To re-derive the list after adding or rebuilding a filter, disassemble each
+# *_1.wasm paired with solver_minimal (wasm-dis), collect its "env"/GOT.mem/
+# GOT.func imports, subtract what the filter exports itself, what this binary
+# already exports (llvm-nm) and what the JS glue defines (solver_minimal_1.js:
+# both the wasmImports object *and* the standalone "function invoke_*"
+# trampolines - forgetting the latter inflates the result badly). What is left
+# is genuinely missing; cross-check each one against solver_1's symbol table
+# before adding it, since GPAC_DISABLE_ISOM and friends mean many gf_isom_*/
+# gf_sc_*/gf_scene_* symbols simply do not exist in this build.
+#
+# Prefer, in order: reconfigure the third-party library so it stops needing
+# the symbol (libraw's --disable-openmp, libheif's
+# -D__EMSCRIPTEN_STANDALONE_WASM__); else link the dependency into the filter
+# (poppler carries its own libjpeg.a); export from here only as a last resort.
+# The one exception is the C++ runtime - a filter must NOT bundle its own
+# libc++/libc++abi, two copies break libc++'s static state across the module
+# boundary (see filters/libheif/CMakeLists.txt).
+
 SET(GPAC
     '_fout_register'
     '_fin_register'
@@ -57,7 +82,6 @@ SET(FILTERS
     '_gf_bs_write_u16'
     '_gf_bs_write_u8'
     '_gf_codecid_name'
-    '_gf_codecid_parse'
     '_gf_codecid_type'
     '_gf_crc_32'
     '_gf_dynstrcat'
@@ -70,9 +94,6 @@ SET(FILTERS
     '_gf_filter_auto_register'
     '_gf_filter_get_dst_name'
     '_gf_filter_get_udta'
-    '_gf_filter_is_temporary'
-    '_gf_filter_meta_set_instances'
-    '_gf_filter_override_caps'
     '_gf_filter_pck_discard'
     '_gf_filter_pck_expand'
     '_gf_filter_pck_get_byte_offset'
@@ -86,7 +107,6 @@ SET(FILTERS
     '_gf_filter_pck_get_timescale'
     '_gf_filter_pck_merge_properties'
     '_gf_filter_pck_new_alloc'
-    '_gf_filter_pck_new_frame_interface'
     '_gf_filter_pck_new_ref'
     '_gf_filter_pck_ref_props'
     '_gf_filter_pck_send'
@@ -126,21 +146,17 @@ SET(FILTERS
     '_gf_filter_pid_set_property_str'
     '_gf_filter_pid_would_block'
     '_gf_filter_release_property'
-    '_gf_filter_report_meta_option'
     '_gf_filter_set_name'
     '_gf_fopen'
     '_gf_fopen_ex'
     '_gf_fputc'
     '_gf_fread'
     '_gf_free'
-    '_gf_fs_add_filter_register'
-    '_gf_fs_remove_filter_register'
     '_gf_fseek'
     '_gf_fsize'
     '_gf_ftell'
     '_gf_fwrite'
     '_gf_get_bit_size'
-    '_gf_irect_union'
     '_gf_itags_find_by_id3tag'
     '_gf_itags_find_by_name'
     '_gf_itags_get_name'
@@ -158,7 +174,6 @@ SET(FILTERS
     '_gf_log_get_tool_level'
     '_gf_log_lt'
     '_gf_log_tool_level_on'
-    '_gf_log_va_list'
     '_gf_malloc'
     '_gf_odf_New_ElemMask'
     '_gf_odf_create_descriptor'
@@ -188,17 +203,14 @@ SET(PTHREADS
     '_pthread_mutex_unlock'
     '_pthread_mutex_destroy'
     '_posix_memalign'
-    '_logs_mx'
     '_pthread_attr_init'
     '_pthread_attr_setdetachstate'
-    '_pthread_cond_broadcast'
     '_pthread_cond_destroy'
     '_pthread_cond_init'
     '_pthread_cond_signal'
     '_pthread_cond_wait'
     '_pthread_create'
     '_pthread_join'
-    '_pthread_once'
     '_sysconf'
 )
 
@@ -213,6 +225,7 @@ SET(ZLIB
     '_inflate'
     '_inflateEnd'
     '_inflateInit_'
+    '_inflateInit2_'
     '_inflateReset'
 )
 
@@ -220,30 +233,10 @@ SET(STDLIB
     '___stack_chk_guard'
     '___stack_chk_fail'
     '_vsnprintf'
-    '_vasprintf'
     '___assert_fail'
-    '___ctype_get_mb_cur_max'
-    '_freelocale'
-    '_fputwc'
-    '_getwc'
     '_lroundf'
-    '_mbrlen'
-    '_mbrtowc'
-    '_mbsnrtowcs'
-    '_mbsrtowcs'
-    '_mbtowc'
     '_mkstemp'
-    '_newlocale'
     '_powl'
-    '_strftime_l'
-    '_strtod_l'
-    '_strtof_l'
-    '_strtold_l'
-    '_ungetwc'
-    '_uselocale'
-    '_wcrtomb'
-    '_wcslen'
-    '_wcsnrtombs'
     '_wmemchr'
     '_sprintf'
     '_siprintf'
@@ -268,7 +261,6 @@ SET(STDLIB
     '_strncat'
     '_strncmp'
     '_strcspn'
-    '_strspn'
     '_strcpy'
     '_strstr'
     '_strrchr'
@@ -278,23 +270,19 @@ SET(STDLIB
     '_strdup'
     '_strcat'
     '_memset'
+    # Needed by ogg_1, libmad_1 and liba52_1 (found by the all-filter scan).
+    # libm, so nothing to reconfigure away and nothing worth bundling per
+    # filter.
+    '_log1p'
     '_exp2'
-    '_atanf'
-    '_sinf'
     '_bsearch'
     '_strtod'
     '_frexp'
-    '_llrint'
-    '_fabs'
     '_exp'
-    '_exp2f'
     '_acos'
     '_asin'
     '_atan'
-    '_sinh'
-    '_tanh'
     '_tan'
-    '_cosh'
     '_pow'
     '_qsort'
     '_log'
@@ -302,9 +290,6 @@ SET(STDLIB
     '_cos'
     '_sin'
     '_ldexp'
-    '_abs'
-    '_srand'
-    '_rand'
     '_round'
     '_roundf'
     '_open'
@@ -317,18 +302,11 @@ SET(STDLIB
     '_lrintf'
     '_lrint'
     '_fwrite'
-    '_log10f'
-    '_cbrt'
     '_atoi'
-    '_strerror_r'
-    '_iconv_open'
-    '___multi3'
-    '_gmtime_r'
     '_isalnum'
     '_fmemopen'
     '_fread'
     '_fclose'
-    '_feof'
     '_abort'
     '_exit'
     '_fflush'
@@ -367,40 +345,15 @@ SET(STDLIB
     '_time'
     '_vfprintf'
     '___errno_location'
-    '_chdir'
-    '_closedir'
-    '_fdopen'
     '_ferror'
     '_fputs'
     '_ftell'
-    '_getopt_long'
-    '_optind'
-    '_optarg'
-    '_getpid'
-    '_getpwnam'
-    '_gettimeofday'
-    '_isatty'
-    '_islower'
     '_isupper'
     '_log10'
-    '_open_memstream'
-    '_opendir'
-    '_pclose'
-    '_popen'
     '_printf'
-    '_putchar'
-    '_readdir'
-    '_rewind'
-    '_signal'
     '_stat'
-    '_strerror'
-    '_strpbrk'
-    '_strtok'
     '_tolower'
-    '_toupper'
     '_unlink'
-    '_usleep'
-    '__emscripten_fs_load_embedded_files'
     '__Exit'
     '_sqrt'
     '_sqrtf'
@@ -409,14 +362,20 @@ SET(STDLIB
     '_llroundf'
 )
 
-# 128-bit long-double compiler-rt softfloat helpers (libclang_rt.builtins.a),
-# needed by libmidi.
+# 128-bit long-double softfloat helpers from libclang_rt.builtins.a, kept
+# because __extenddftf2 is imported by libmidi and the other four by libtiff
+# (__extendsftf2, __fpclassifyl) and libheif (__fixunstfsi, __floatunsitf).
+# They have to be exported rather than pushed into the filters: no build flag
+# on those libraries avoids long double, and a per-filter compiler-rt copy
+# would cost far more than the ~2KB this adds. __addtf3, __fixtfsi, __multf3
+# and __trunctfdf2 used to be listed here and were dropped - no filter paired
+# with solver_minimal imports them (see the note at the top of this file).
 SET(COMPILER_RT
-    '___addtf3'
     '___extenddftf2'
-    '___fixtfsi'
-    '___multf3'
-    '___trunctfdf2'
+    '___extendsftf2'
+    '___fpclassifyl'
+    '___fixunstfsi'
+    '___floatunsitf'
 )
 
 # C++ runtime (new/delete/exception handling) needed by C++ filters such as
@@ -515,7 +474,6 @@ SET(POPPLER
     '__ZNSt3__25mutexD1Ev'
     '__ZNSt3__26__sortIRNS_6__lessIddEEPdEEvT0_S5_T_'
     '__ZNSt3__26chrono12steady_clock3nowEv'
-    '__ZNSt3__26localeC1Ev'
     '__ZNSt3__26localeD1Ev'
     '__ZNSt3__28ios_base4initEPv'
     '__ZNSt3__28ios_base5clearEj'
@@ -526,18 +484,15 @@ SET(POPPLER
     '__ZTVN10__cxxabiv117__class_type_infoE'
     '__ZTVN10__cxxabiv120__si_class_type_infoE'
     '__ZTVN10__cxxabiv121__vmi_class_type_infoE'
-    '__ZTVNSt3__215basic_streambufIcNS_11char_traitsIcEEEE'
     '__ZTVNSt3__215basic_stringbufIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
     '__ZTVNSt3__219basic_ostringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
     '__ZdaPvm'
     '___cxa_pure_virtual'
     '___dynamic_cast'
     '___small_fprintf'
-    '___small_printf'
     '_difftime'
     '_fileno'
     '_hypot'
-    '_iprintf'
     '_isalpha'
     '_isprint'
     '_isxdigit'
@@ -545,10 +500,83 @@ SET(POPPLER
     '_localtime_r'
     '_modf'
     '_pread'
-    '_puts'
     '_strftime'
     '_timegm'
     '_ungetc'
+
+    # Second batch, found by re-running the scan described above against a
+    # rebuilt libpoppler_1.wasm: diff its "env"/GOT imports against
+    # solver_minimal_1's exports, drop everything the filter already exports
+    # itself (all the FreeType af_*/ft_*/tt_* and libjpeg jpeg_* data
+    # symbols are resolved inside the filter, not here), then keep only what
+    # solver_1 actually defines. The one that surfaced first at runtime was
+    # the basic_ios vtable, since poppler builds a std::ostringstream as soon
+    # as it reports anything.
+    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE4findEcm'
+    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEPKc'
+    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEmmPKc'
+    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEmmPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEmc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6insertEmPKc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6resizeEmc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7replaceEmmPKc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7reserveEm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1ERKS5_mmRKS4_'
+    '__ZNSt3__215basic_streambufIcNS_11char_traitsIcEEEC2Ev'
+    '__ZNSt3__215basic_streambufIcNS_11char_traitsIcEEED2Ev'
+    '__ZNSt3__222__libcpp_verbose_abortEPKcz'
+    '__ZNSt3__2plIcNS_11char_traitsIcEENS_9allocatorIcEEEENS_12basic_stringIT_T0_T1_EEPKS6_RKS9_'
+    '__ZTVNSt3__214__shared_countE'
+    '__ZTVNSt3__219__shared_weak_countE'
+    '__ZTVNSt3__28ios_baseE'
+    '__ZTVNSt3__29basic_iosIcNS_11char_traitsIcEEEE'
+    '_mmap'
+    '_munmap'
+)
+
+# libheif no longer bundles its own libc++/libc++abi (see the comment in
+# filters/libheif/CMakeLists.txt - two C++ runtimes in one process broke
+# libc++'s static state across the module boundary), so the runtime now has
+# to come from here. Found by the same wasm-dis scan as the POPPLER block
+# above, and every one of them cross-checked as actually defined in
+# solver_1. Mostly ostream operator<< overloads, the exception hierarchy's
+# RTTI/vtables, and the std::thread + condition_variable used by libheif's
+# (single-threaded here) worker plumbing.
+SET(LIBHEIF
+    '__ZNSt11logic_errorC2EPKc'
+    '__ZNSt12length_errorD1Ev'
+    '__ZNSt20bad_array_new_lengthC1Ev'
+    '__ZNSt20bad_array_new_lengthD1Ev'
+    '__ZNSt3__212bad_weak_ptrD1Ev'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEb'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEd'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEf'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEi'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEj'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEm'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEs'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEt'
+    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEy'
+    '__ZNSt3__214basic_iostreamIcNS_11char_traitsIcEEED2Ev'
+    '__ZNSt3__218condition_variable10notify_allEv'
+    '__ZNSt3__218condition_variable10notify_oneEv'
+    '__ZNSt3__218condition_variable4waitERNS_11unique_lockINS_5mutexEEE'
+    '__ZNSt3__218condition_variableD1Ev'
+    '__ZNSt3__26thread4joinEv'
+    '__ZNSt3__26threadD1Ev'
+    '__ZNSt9exceptionD2Ev'
+    '__ZTINSt3__212bad_weak_ptrE'
+    '__ZTISt12length_error'
+    '__ZTISt18bad_variant_access'
+    '__ZTISt20bad_array_new_length'
+    '__ZTTNSt3__218basic_stringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
+    '__ZTVNSt3__212bad_weak_ptrE'
+    '__ZTVNSt3__218basic_stringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
+    '__ZTVSt12length_error'
+    '__ZTVSt18bad_variant_access'
+    '__ZTVSt9exception'
+    '___cxa_allocate_exception'
 )
 
 SET(EMSCRIPTEN
@@ -576,6 +604,7 @@ SET(EXTERNAL_FN
     ${ZLIB}
     ${COMPILER_RT}
     ${POPPLER}
+    ${LIBHEIF}
 )
 
 string(JOIN "," EXPORTED_FUNCTIONS ${EXTERNAL_FN})
