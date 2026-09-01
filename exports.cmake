@@ -217,6 +217,8 @@ SET(ZLIB
 )
 
 SET(STDLIB
+    '___stack_chk_guard'
+    '___stack_chk_fail'
     '_vsnprintf'
     '_vasprintf'
     '___assert_fail'
