@@ -29,6 +29,7 @@ SET(solver_minimal_SRC
   stats.c
   gpac.c
   legacy_abi.c
+  cxx_stream_anchor.cpp
 )
 
 SET(EXTERNAL_RUNTIME

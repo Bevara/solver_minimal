@@ -399,6 +399,33 @@ SET(CXX_RUNTIME
     '___cxa_find_matching_catch_3'
     '___cxa_throw'
     '___resumeException'
+# Points d'entree de cxx_stream_anchor.cpp : jamais appeles, listes ici pour que
+# l'unite de compilation survive a l'elimination de code mort. Sans eux les
+# vtables/typeinfo libc++ qu'elle instancie n'existent pas dans le module
+# principal, et le chargement des filtres C++ (libjxl, libheif, libraw) echoue
+# sur une entree GOT non resolue (Cannot read properties of undefined 'value').
+    '_gpac_cxx_stream_anchor'
+    '_gpac_cxx_except_anchor'
+    '_gpac_cxx_rtti_anchor'
+    '_gpac_cxx_guard_anchor'
+    '_gpac_cxx_enumrtti_anchor'
+    '_gpac_cxx_sort_anchor'
+    '_gpac_cxx_locale_anchor'
+# Runtime C++ importe par les filtres image (libjxl, libheif, libraw) :
+# instancie par cxx_stream_anchor.cpp ci-dessus, exporte ici.
+    '__ZTISt12out_of_range'
+    '__ZTVSt12out_of_range'
+    '__ZNSt12out_of_rangeD1Ev'
+    '___cxa_guard_acquire'
+    '___cxa_guard_release'
+    '__ZNSt3__26__sortIRNS_6__lessIiiEEPiEEvT0_S5_T_'
+    '__ZNSt3__26__sortIRNS_6__lessImmEEPmEEvT0_S5_T_'
+    '__ZTVN10__cxxabiv116__enum_type_infoE'
+    '__ZNSt3__26localeC1Ev'
+    '__ZTVNSt3__215basic_streambufIcNS_11char_traitsIcEEEE'
+    '___multi3'
+    '_iprintf'
+    '_ldexpl'
 )
 
 # Symbols the libpoppler filter's poppler-cpp/poppler static libs need
