@@ -607,6 +607,17 @@ SET(LIBHEIF
 )
 
 SET(EMSCRIPTEN
+    # Every side module imports env.__stack_pointer (wasm-ld makes the stack
+    # pointer an import in any -shared link), and the glue satisfies it from
+    # this module's exports via mergeLibSymbols(wasmExports, 'main'). emscripten
+    # already asks wasm-ld for the export (REQUIRED_EXPORTS in link.py), but
+    # with MAIN_MODULE=2 wasm-metadce then drops it again as unused, since no
+    # JS statement receives it - unlike MAIN_MODULE=1, which sets LINKABLE and
+    # skips the DCE entirely. Listing it here gives the glue a receiving
+    # assignment, which roots it in the DCE graph and keeps the export alive.
+    # Without it every filter dies at instantiation with "imported mutable
+    # global must be a WebAssembly.Global object".
+    '___stack_pointer'
     '_emscripten_longjmp'
     '___threwValue'
     '___THREW__'
