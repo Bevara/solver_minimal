@@ -217,9 +217,12 @@ SET(PTHREADS
 # zlib symbols (USE_ZLIB=1) needed directly by filters that call zlib
 # themselves (e.g. libtiff's deflate/zip support) rather than through gpac.
 SET(ZLIB
+    '_adler32'
+    '_crc32'
     '_deflate'
     '_deflateEnd'
     '_deflateInit_'
+    '_deflateInit2_'
     '_deflateParams'
     '_deflateReset'
     '_inflate'
@@ -227,6 +230,7 @@ SET(ZLIB
     '_inflateInit_'
     '_inflateInit2_'
     '_inflateReset'
+    '_inflateReset2'
 )
 
 SET(STDLIB
@@ -363,19 +367,18 @@ SET(STDLIB
 )
 
 # 128-bit long-double softfloat helpers from libclang_rt.builtins.a, kept
-# because __extenddftf2 is imported by libmidi and the other four by libtiff
-# (__extendsftf2, __fpclassifyl) and libheif (__fixunstfsi, __floatunsitf).
-# They have to be exported rather than pushed into the filters: no build flag
-# on those libraries avoids long double, and a per-filter compiler-rt copy
-# would cost far more than the ~2KB this adds. __addtf3, __fixtfsi, __multf3
-# and __trunctfdf2 used to be listed here and were dropped - no filter paired
-# with solver_minimal imports them (see the note at the top of this file).
+# because __extenddftf2 is imported by libmidi and __extendsftf2 and
+# __fpclassifyl by libtiff. They have to be exported rather than pushed into
+# the filters: no build flag on those libraries avoids long double, and a
+# per-filter compiler-rt copy would cost far more than the ~2KB this adds.
+# __fixunstfsi and __floatunsitf were libheif's, which pairs with solver_1
+# now; __addtf3, __fixtfsi, __multf3 and __trunctfdf2 were dropped earlier -
+# no filter paired with solver_minimal imports them (see the note at the top
+# of this file).
 SET(COMPILER_RT
     '___extenddftf2'
     '___extendsftf2'
     '___fpclassifyl'
-    '___fixunstfsi'
-    '___floatunsitf'
 )
 
 # C++ runtime (new/delete/exception handling) needed by C++ filters such as
@@ -411,6 +414,14 @@ SET(CXX_RUNTIME
     '_gpac_cxx_enumrtti_anchor'
     '_gpac_cxx_sort_anchor'
     '_gpac_cxx_locale_anchor'
+# sjlj_anchor.c: forces the invoke_* trampolines a side module may need but
+# this module's own code never uses. The glue only defines invoke_<sig> for
+# the signatures the MAIN module imports, and a side module that imports one
+# it does not define gets a lazy stub that fails at the first call with
+# "resolved is not a function" - the way libpng (invoke_viiiiiiiii) and
+# libicns (invoke_iiiiiiiiii) broke when libgpac_static shrank and the code
+# that happened to use those signatures went with it.
+    '_gpac_sjlj_anchor'
 # Runtime C++ importe par les filtres image (libjxl, libheif, libraw) :
 # instancie par cxx_stream_anchor.cpp ci-dessus, exporte ici.
     '__ZTISt12out_of_range'
@@ -428,182 +439,50 @@ SET(CXX_RUNTIME
     '_ldexpl'
 )
 
-# Symbols the libpoppler filter's poppler-cpp/poppler static libs need
-# ("env" imports + GOT.mem imports not already covered above) - found by
-# diffing libpoppler_1.wasm's own imports against this file's export
-# list, then cross-checked against solver_1's (MAIN_MODULE=1, broad/
-# auto-export) symbol table to confirm each one is a real, already-
-# working symbol rather than something needing a filter-local shim like
-# libjxl's. libc++ string/iostream/locale/mutex/shared_ptr internals,
-# and RTTI vtables for the C++ exception hierarchy. FreeType (font
-# rendering) is NOT here: gpac_minimal (solver_minimal's own libgpac
-# build) never links FreeType at all, so there is nothing to export -
-# the filter's CMakeLists.txt instead links a static libfreetype.a
-# directly into libpoppler_1.wasm itself (matching how libheif bundles
-# its own codec libs, rather than expecting solver_minimal to provide
-# them). std::regex and std::filesystem::directory_iterator were
-# NOT added here: their symbol footprint (~80 of the mangled libc++
-# symbols GOT.mem alone) was disproportionate for two PDFDoc.cc/
-# GlobalParams.cc helpers this filter's page-0-to-RGB rendering never
-# calls (PDF/A|X|VT|E|UA subtype detection, on-disk poppler-data
-# encoding-table discovery this WASM build never bundles anyway) - see
-# poppler/PDFDoc.cc's and GlobalParams.cc's own comments at those call
-# sites for the source-level fix instead.
-SET(POPPLER
-    '__ZNKSt3__210filesystem4path10__filenameEv'
-    '__ZNKSt3__210filesystem4path16__root_directoryEv'
-    '__ZNKSt3__210filesystem4path16lexically_normalEv'
-    '__ZNKSt3__210filesystem4path3endEv'
-    '__ZNKSt3__210filesystem4path5beginEv'
-    '__ZNKSt3__210filesystem4path9__compareENS_17basic_string_viewIcNS_11char_traitsIcEEEE'
+# What is left of the former POPPLER and LIBHEIF blocks. Those two filters
+# now pair with solver_1 (their tests say so), and the 85 symbols only they
+# imported are gone. These 35 stayed because other filters paired with
+# solver_minimal import them too - libjxl, libraw, libflif, libape, libpgf,
+# libpsd, libilbc, libmpg123 - found by scanning each *_1.wasm's env/GOT
+# imports against this list (the scan described at the top of this file).
+# Mostly libc++ basic_string internals, the exception hierarchy's RTTI, and
+# the __class_type_info vtables every polymorphic C++ type needs.
+SET(CXX_RUNTIME_SHARED
     '__ZNKSt3__219__shared_weak_count13__get_deleterERKSt9type_info'
-    '__ZNKSt3__26locale9use_facetERNS0_2idE'
-    '__ZNKSt3__28ios_base6getlocEv'
-    '__ZNSt3__210filesystem4path8iterator11__incrementEv'
-    '__ZNSt3__211__call_onceERVmPvPFvS2_E'
-    '__ZNSt3__212__next_primeEm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEED1Ev'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEED2Ev'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb0EEERS5_PKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb1EEERS5_PKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE21__grow_by_and_replaceEmmmmmmPKc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE25__init_copy_ctor_externalEPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE26__erase_external_with_moveEmm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEPKc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEmc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6insertEmPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7replaceEmmPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE9push_backEc'
-    '__ZNSt3__213__hash_memoryEPKvm'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEE3putEc'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEE5flushEv'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEE6sentryC1ERS3_'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEE6sentryD1Ev'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEED2Ev'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEx'
-    '__ZNSt3__213random_deviceC2ERKNS_12basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
-    '__ZNSt3__213random_deviceD1Ev'
-    '__ZNSt3__213random_deviceclEv'
-    '__ZNSt3__215recursive_mutex4lockEv'
-    '__ZNSt3__215recursive_mutex6unlockEv'
-    '__ZNSt3__215recursive_mutexC1Ev'
-    '__ZNSt3__215recursive_mutexD1Ev'
-    '__ZNSt3__219__shared_weak_count14__release_weakEv'
-    '__ZNSt3__219__shared_weak_count4lockEv'
-    '__ZNSt3__219__shared_weak_countD2Ev'
-    '__ZNSt3__24cerrE'
-    '__ZNSt3__25ctypeIcE2idE'
-    '__ZNSt3__25mutex4lockEv'
-    '__ZNSt3__25mutex6unlockEv'
-    '__ZNSt3__25mutexD1Ev'
-    '__ZNSt3__26__sortIRNS_6__lessIddEEPdEEvT0_S5_T_'
-    '__ZNSt3__26chrono12steady_clock3nowEv'
-    '__ZNSt3__26localeD1Ev'
-    '__ZNSt3__28ios_base4initEPv'
-    '__ZNSt3__28ios_base5clearEj'
-    '__ZNSt3__29basic_iosIcNS_11char_traitsIcEEED2Ev'
-    '__ZNSt3__29to_stringEi'
-    '__ZTINSt3__219__shared_weak_countE'
-    '__ZTTNSt3__219basic_ostringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
-    '__ZTVN10__cxxabiv117__class_type_infoE'
-    '__ZTVN10__cxxabiv120__si_class_type_infoE'
-    '__ZTVN10__cxxabiv121__vmi_class_type_infoE'
-    '__ZTVNSt3__215basic_stringbufIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
-    '__ZTVNSt3__219basic_ostringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
-    '__ZdaPvm'
-    '___cxa_pure_virtual'
-    '___dynamic_cast'
-    '___small_fprintf'
-    '_difftime'
-    '_fileno'
-    '_hypot'
-    '_isalpha'
-    '_isprint'
-    '_isxdigit'
-    '_localeconv'
-    '_localtime_r'
-    '_modf'
-    '_pread'
-    '_strftime'
-    '_timegm'
-    '_ungetc'
-
-    # Second batch, found by re-running the scan described above against a
-    # rebuilt libpoppler_1.wasm: diff its "env"/GOT imports against
-    # solver_minimal_1's exports, drop everything the filter already exports
-    # itself (all the FreeType af_*/ft_*/tt_* and libjpeg jpeg_* data
-    # symbols are resolved inside the filter, not here), then keep only what
-    # solver_1 actually defines. The one that surfaced first at runtime was
-    # the basic_ios vtable, since poppler builds a std::ostringstream as soon
-    # as it reports anything.
-    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE4findEcm'
-    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEPKc'
-    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEmmPKc'
-    '__ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEmmPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEmc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6insertEmPKc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6resizeEmc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7replaceEmmPKc'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7reserveEm'
-    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1ERKS5_mmRKS4_'
-    '__ZNSt3__215basic_streambufIcNS_11char_traitsIcEEEC2Ev'
-    '__ZNSt3__215basic_streambufIcNS_11char_traitsIcEEED2Ev'
-    '__ZNSt3__222__libcpp_verbose_abortEPKcz'
-    '__ZNSt3__2plIcNS_11char_traitsIcEENS_9allocatorIcEEEENS_12basic_stringIT_T0_T1_EEPKS6_RKS9_'
-    '__ZTVNSt3__214__shared_countE'
-    '__ZTVNSt3__219__shared_weak_countE'
-    '__ZTVNSt3__28ios_baseE'
-    '__ZTVNSt3__29basic_iosIcNS_11char_traitsIcEEEE'
-    '_mmap'
-    '_munmap'
-)
-
-# libheif no longer bundles its own libc++/libc++abi (see the comment in
-# filters/libheif/CMakeLists.txt - two C++ runtimes in one process broke
-# libc++'s static state across the module boundary), so the runtime now has
-# to come from here. Found by the same wasm-dis scan as the POPPLER block
-# above, and every one of them cross-checked as actually defined in
-# solver_1. Mostly ostream operator<< overloads, the exception hierarchy's
-# RTTI/vtables, and the std::thread + condition_variable used by libheif's
-# (single-threaded here) worker plumbing.
-SET(LIBHEIF
     '__ZNSt11logic_errorC2EPKc'
     '__ZNSt12length_errorD1Ev'
     '__ZNSt20bad_array_new_lengthC1Ev'
     '__ZNSt20bad_array_new_lengthD1Ev'
-    '__ZNSt3__212bad_weak_ptrD1Ev'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEb'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEd'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEf'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEi'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEj'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEm'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEs'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEt'
-    '__ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEy'
-    '__ZNSt3__214basic_iostreamIcNS_11char_traitsIcEEED2Ev'
-    '__ZNSt3__218condition_variable10notify_allEv'
-    '__ZNSt3__218condition_variable10notify_oneEv'
-    '__ZNSt3__218condition_variable4waitERNS_11unique_lockINS_5mutexEEE'
-    '__ZNSt3__218condition_variableD1Ev'
-    '__ZNSt3__26thread4joinEv'
-    '__ZNSt3__26threadD1Ev'
-    '__ZNSt9exceptionD2Ev'
-    '__ZTINSt3__212bad_weak_ptrE'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb0EEERS5_PKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb1EEERS5_PKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE25__init_copy_ctor_externalEPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE26__erase_external_with_moveEmm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEPKc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6insertEmPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7replaceEmmPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE9push_backEc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEmc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6resizeEmc'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7reserveEm'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1ERKS5_mmRKS4_'
+    '__ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEED1Ev'
+    '__ZNSt3__219__shared_weak_count14__release_weakEv'
+    '__ZNSt3__219__shared_weak_countD2Ev'
+    '__ZTINSt3__219__shared_weak_countE'
     '__ZTISt12length_error'
-    '__ZTISt18bad_variant_access'
     '__ZTISt20bad_array_new_length'
-    '__ZTTNSt3__218basic_stringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
-    '__ZTVNSt3__212bad_weak_ptrE'
-    '__ZTVNSt3__218basic_stringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE'
+    '__ZTVN10__cxxabiv117__class_type_infoE'
+    '__ZTVN10__cxxabiv120__si_class_type_infoE'
     '__ZTVSt12length_error'
-    '__ZTVSt18bad_variant_access'
-    '__ZTVSt9exception'
+    '__ZdaPvm'
     '___cxa_allocate_exception'
+    '___cxa_pure_virtual'
+    '___small_fprintf'
+    '_fileno'
 )
 
 SET(EMSCRIPTEN
@@ -641,8 +520,7 @@ SET(EXTERNAL_FN
     ${CXX_RUNTIME}
     ${ZLIB}
     ${COMPILER_RT}
-    ${POPPLER}
-    ${LIBHEIF}
+    ${CXX_RUNTIME_SHARED}
 )
 
 string(JOIN "," EXPORTED_FUNCTIONS ${EXTERNAL_FN})
