@@ -414,14 +414,6 @@ SET(CXX_RUNTIME
     '_gpac_cxx_enumrtti_anchor'
     '_gpac_cxx_sort_anchor'
     '_gpac_cxx_locale_anchor'
-# sjlj_anchor.c: forces the invoke_* trampolines a side module may need but
-# this module's own code never uses. The glue only defines invoke_<sig> for
-# the signatures the MAIN module imports, and a side module that imports one
-# it does not define gets a lazy stub that fails at the first call with
-# "resolved is not a function" - the way libpng (invoke_viiiiiiiii) and
-# libicns (invoke_iiiiiiiiii) broke when libgpac_static shrank and the code
-# that happened to use those signatures went with it.
-    '_gpac_sjlj_anchor'
 # Runtime C++ importe par les filtres image (libjxl, libheif, libraw) :
 # instancie par cxx_stream_anchor.cpp ci-dessus, exporte ici.
     '__ZTISt12out_of_range'
