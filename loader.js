@@ -1,4 +1,18 @@
 (async () => {
+  /* Le factory du module, capture a l'evaluation du script. `libgpac` est un
+   * `var` global, et solver_1.js comme solver_minimal_1.js declarent le meme
+   * nom : le dernier script charge dans la page ecrase le precedent. Une page
+   * qui melange les deux solveurs (la suite karma le fait) pouvait donc
+   * instancier le .wasm d'un solveur avec la glue de l'autre, d'ou
+   * `LinkError: Import "env" "glGetUniformLocation": function import requires
+   * a callable` - la glue de solver_minimal ne fournit pas les fonctions GL
+   * qu'attend solver_1.wasm. Ne se produit que lorsque deux sessions se
+   * recouvrent, c'est-a-dire quand une session precedente n'a pas rendu la
+   * main (test expire) ; sur un agent lent, un seul depassement de delai
+   * faisait ensuite echouer tous les tests suivants de l'autre solveur.
+   * On garde donc une reference locale, prise avant qu'un autre script ne
+   * puisse ecraser le global. */
+  const gpacFactory = libgpac;
   const ENVIRONMENT_IS_WEB = typeof window == 'object';
   const ENVIRONMENT_IS_WORKER = typeof importScripts == 'function';
 
@@ -229,6 +243,16 @@
     }
 
     async function init(m) {
+      /* Horodatage des grandes etapes, remis a l'appelant avec le message
+       * final (message.timings) pour les mesures de performance :
+       *   init        reception du message "init"
+       *   moduleReady solveur instancie, side modules lies, runtime pret
+       *   mainStart   entree dans gpac main() (resolution du graphe + decodage)
+       *   firstSegment premier segment media remis a MSE (progressif seulement)
+       *   done        gpac_done
+       * performance.now() est relatif a l'origine temporelle du contexte (page
+       * ou worker) : timeOrigin permet de recaler sur celle de la page. */
+      const timings = { timeOrigin: performance.timeOrigin, init: performance.now() };
       const message = {
       };
       const params = m.data.module ? m.data.module : {};
@@ -328,6 +352,8 @@
         if (code) console.log('(exit code ' + code + ')');
 
         message["exit_code"] = code;
+        timings.done = performance.now();
+        message["timings"] = timings;
 
         if (m.data.bench == true) {
           message.decodeEnd = performance.now();
@@ -361,7 +387,8 @@
         message.compileStart = performance.now();
       }
 
-      module = await libgpac(params);
+      module = await gpacFactory(params);
+      timings.moduleReady = performance.now();
       const FS = module['FS'];
 
       //From gpac_pre.js
@@ -408,7 +435,18 @@
       }
 
 
-      if (m.data.dst) {
+      /* Banc de decodage pur, methode documentee par gpac :
+       *   gpac -i src reframer:raw=av -o null
+       * le reframer force le decodage de toutes les pistes et fout jette le
+       * resultat. Pas de vout ni d'aout : rien ne cadence la session, et une
+       * piste sans sortie ne declenche pas le STOP qui, en mode vbench,
+       * interrompait httpin des la premiere piste non connectee. */
+      if (m.data.decodeOnly) {
+        registerFilter("fout", "_fout_register");
+        args.push("reframer:raw=av");
+        args.push("-o");
+        args.push("null");
+      } else if (m.data.dst) {
         registerFilter("writegen", "_writegen_register");
         registerFilter("fout", "_fout_register");
         args.push("-o");
@@ -497,6 +535,7 @@
         //gpac_em_sig_handler(4);
         //setProperty({"graph":m.data.showGraph != null, "report":m.data.showReport  != null, "stats":m.data.showStats  != null})
         try {
+          timings.mainStart = performance.now();
           module["_main"](argc, argv);
         } catch (e) {
           //unwind thrown by emscripten main
