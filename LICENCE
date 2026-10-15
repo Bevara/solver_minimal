@@ -1,6 +1,6 @@
 SPDX-License-Identifier: LGPL-2.1-or-later AND Zlib
 
-solver_minimal - Copyright (c) 2026 Bevara
+solver_minimal - Copyright (c) 2026 Bevara Technologies, LLC
 
 This runtime statically links GPAC (lib/libgpac_static.a), Copyright (c) Telecom
 Paris, under LGPL-2.1-or-later, and zlib 1.3.2 (Emscripten port, -sUSE_ZLIB=1) under the zlib licence.
