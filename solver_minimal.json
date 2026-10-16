@@ -2,5 +2,10 @@
     "name": "solver_minimal",
     "kind": "runtime",
     "description": "Bevara minimal solver: GPAC filter session with file input and output only, for <img> and <audio>",
-    "help": "The main module that accessors (side modules) link against: pages name it in using=\"solver_minimal_1\". It embeds the GPAC filter session and the link resolver, with file input and output only; everything else comes from the accessors."
+    "help": "The main module that accessors (side modules) link against: pages name it in using=\"solver_minimal_1\". It embeds the GPAC filter session and the link resolver, with file input and output only; everything else comes from the accessors.",
+    "patents": {
+        "status": "royalty-free",
+        "note": "GPAC, zlib",
+        "checked": "2026-10-16"
+    }
 }
