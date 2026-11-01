@@ -261,7 +261,7 @@ void destroy()
 	 * surfacing later (sometimes in a *different* filter session's own
 	 * teardown) as a "memory access out of bounds" trap deep inside
 	 * dlfree - confirmed as the source of an intermittent crash on
-	 * solver_minimal_1 image/audio decode tests. Guard against it so
+	 * mm_solver_minimal_1.0.1 image/audio decode tests. Guard against it so
 	 * destroy() is safe to call whether or not main() already cleaned
 	 * up. */
 	if (session) {

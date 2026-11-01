@@ -1,12 +1,12 @@
 (async () => {
   /* Le factory du module, capture a l'evaluation du script. `libgpac` est un
-   * `var` global, et solver_1.js comme solver_minimal_1.js declarent le meme
+   * `var` global, et mm_solver_1.0.1.js comme mm_solver_minimal_1.0.1.js declarent le meme
    * nom : le dernier script charge dans la page ecrase le precedent. Une page
    * qui melange les deux solveurs (la suite karma le fait) pouvait donc
    * instancier le .wasm d'un solveur avec la glue de l'autre, d'ou
    * `LinkError: Import "env" "glGetUniformLocation": function import requires
    * a callable` - la glue de solver_minimal ne fournit pas les fonctions GL
-   * qu'attend solver_1.wasm. Ne se produit que lorsque deux sessions se
+   * qu'attend mm_solver_1.0.1.wasm. Ne se produit que lorsque deux sessions se
    * recouvrent, c'est-a-dire quand une session precedente n'a pas rendu la
    * main (test expire) ; sur un agent lent, un seul depassement de delai
    * faisait ensuite echouer tous les tests suivants de l'autre solveur.
@@ -259,7 +259,7 @@
       let args = [];
 
       params["locateFile"] = function (path, scriptDirectory) {
-        if (path == "solver_minimal_1.wasm" && m.data.wasmBinaryFile) {
+        if (path == "@MODULE@.wasm" && m.data.wasmBinaryFile) {
           return m.data.wasmBinaryFile;
         }
         return path;
@@ -597,6 +597,6 @@
     const handle_message = await initSolver();
     addEventListener("message", handle_message);
   } else if (ENVIRONMENT_IS_WEB) {
-    window.solver_minimal_1 = initSolver;
+    window["@MODULE@"] = initSolver;   // the name of the solver, set by CMakeLists.txt
   }
 })();

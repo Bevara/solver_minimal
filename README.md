@@ -3,16 +3,16 @@ The solver select an optimal arrangement of filters to decode a given source.
 ## Publishing it as a runtime
 
 `solver_minimal.json` makes this directory a **runtime** for the Bevara registry: the
-main module that accessors link against, named by pages as `using="solver_minimal_1"`.
+main module that accessors link against, named by pages as `using="mm_solver_minimal_1.0.1"`.
 
 ```bash
 source <emsdk 6.0.8>/emsdk_env.sh      # third_parties/emsdk_vers.txt
-bevara publish --build                  # builds .bevara/.build/solver_minimal_1.js and .wasm, signs, uploads
+bevara publish --build                  # builds .bevara/.build/mm_solver_minimal_1.0.1.js and .wasm, signs, uploads
 ```
 
 The version is the generation (`set(VERSION "1")` in CMakeLists.txt), the
 licence comes from `LICENCE`, and the built-in filters from `loader.js`.
-Filters whose `"using"` names `solver_minimal_1` can only be published once this
+Filters whose `"using"` names `mm_solver_minimal_1.0.1` can only be published once this
 runtime is.
 
 ## Provenance of lib/libgpac_static.a
